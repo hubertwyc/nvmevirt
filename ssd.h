@@ -7,6 +7,7 @@
 #include "pqueue/pqueue.h"
 #include "ssd_config.h"
 #include "channel_model.h"
+#include <linux/atomic.h>
 /*
     Default malloc size (when sector size is 512B)
     Channel = 40 * 8 = 320
@@ -95,6 +96,8 @@ struct nand_block {
 	int vpc; /* valid page count */
 	int erase_cnt;
 	int wp; /* current write pointer */
+	atomic64_t user_nand_reads;
+	atomic64_t gc_nand_reads;
 };
 
 struct nand_plane {

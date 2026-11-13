@@ -199,6 +199,8 @@ static void ssd_init_nand_blk(struct nand_block *blk, struct ssdparams *spp)
 	blk->vpc = 0;
 	blk->erase_cnt = 0;
 	blk->wp = 0;
+	atomic64_set(&blk->user_nand_reads, 0);
+	atomic64_set(&blk->gc_nand_reads, 0);
 }
 
 static void ssd_remove_nand_blk(struct nand_block *blk)
@@ -388,6 +390,24 @@ uint64_t ssd_advance_nand(struct ssd *ssd, struct nand_cmd *ncmd)
 
 	switch (c) {
 	case NAND_READ:
+		if (ncmd->type == USER_IO) {
+			struct nand_block *blk = get_blk(ssd, ppa);
+			s64 reads = atomic64_inc_return(&blk->user_nand_reads);
+
+			if (reads == 1 || reads % 128 == 0) {
+				NVMEV_INFO(
+					"NAND_READ ch=%u lun=%u blk=%u wl=%u user_reads=%lld\n",
+					(unsigned int)ppa->g.ch,
+					(unsigned int)ppa->g.lun,
+					(unsigned int)ppa->g.blk,
+					(unsigned int)(ppa->g.pg / spp->pgs_per_flashpg),
+					(long long)reads);
+			}
+		} else if (ncmd->type == GC_IO) {
+			struct nand_block *blk = get_blk(ssd, ppa);
+
+			atomic64_inc(&blk->gc_nand_reads);
+		}
 		/* read: perform NAND cmd first */
 		nand_stime = max(lun->next_lun_avail_time, cmd_stime);
 
